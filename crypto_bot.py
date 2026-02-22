@@ -7,29 +7,31 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # --- ЗАГРУЗКА НАСТРОЕК ---
-load_dotenv() # Эта команда ищет файл .env и читает его
+load_dotenv() 
 
 TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TG_ID')
 
-SYMBOL = 'BTC/USDT'     
+# ТЕПЕРЬ ТУТ СПИСОК (LIST) МОНЕТ!
+SYMBOLS = [
+    'BTC/USDT',  # Биткоин
+    'ETH/USDT',  # Эфириум
+    'TON/USDT',  # Тонкоин (Телеграм)
+    'SOL/USDT'   # Солана (быстрая и модная)
+]
+
 TIMEFRAME = '1h'        
 CHECK_INTERVAL = 3600   # Проверка раз в час
 
-# --- ФУНКЦИЯ ОТПРАВКИ В ТЕЛЕГРАМ ---
 def send_telegram(message):
-    if not TOKEN or not CHAT_ID:
-        print("⚠️ Ошибка: Нет токена или ID в файле .env")
-        return
-        
+    if not TOKEN or not CHAT_ID: return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": message}
     try:
         requests.post(url, data=data)
-    except Exception as e:
-        print(f"Не удалось отправить сообщение: {e}")
+    except:
+        pass
 
-# --- ФУНКЦИЯ РАСЧЕТА RSI ---
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).ewm(alpha=1/period, adjust=False).mean()
@@ -37,40 +39,40 @@ def calculate_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# --- ОСНОВНОЙ ЦИКЛ ---
-def check_market():
+def check_market(symbol):
     try:
         exchange = ccxt.bybit()
-        bars = exchange.fetch_ohlcv(SYMBOL, timeframe=TIMEFRAME, limit=100)
+        bars = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=100)
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         
         df['rsi'] = calculate_rsi(df['close'])
         
         current_price = df['close'].iloc[-1]
         current_rsi = df['rsi'].iloc[-1]
-        now = datetime.now().strftime("%d.%m %H:%M")
+        now = datetime.now().strftime("%H:%M")
 
-        log_msg = f"[{now}] {SYMBOL} | Цена: {current_price:.2f} $ | RSI: {current_rsi:.2f}"
-        print(log_msg)
+        print(f"[{now}] {symbol} | Цена: {current_price} | RSI: {current_rsi:.2f}")
 
-        # ЛОГИКА СИГНАЛОВ
+        # Сигналы
         if current_rsi < 30:
-            msg = f"🟢 {SYMBOL}\nЦена: {current_price}\nRSI: {current_rsi:.2f}\nРынок перепродан (дешево)! Можно искать точку входа."
-            print("Отправляю сигнал на покупку...")
+            msg = f"🟢 {symbol}\nЦена: {current_price}\nRSI: {current_rsi:.2f}\nМожно брать (дешево)!"
             send_telegram(msg)
-            
         elif current_rsi > 70:
-            msg = f"🔴 {SYMBOL}\nЦена: {current_price}\nRSI: {current_rsi:.2f}\nРынок перегрет (дорого)! Опасно, возможен откат."
-            print("Отправляю сигнал на продажу...")
+            msg = f"🔴 {symbol}\nЦена: {current_price}\nRSI: {current_rsi:.2f}\nЛучше продать (дорого)!"
             send_telegram(msg)
             
     except Exception as e:
-        print(f"Ошибка: {e}")
-        send_telegram(f"⚠️ Бот упал с ошибкой: {e}")
+        print(f"Ошибка с {symbol}: {e}")
 
 if __name__ == "__main__":
-    print("Бот-советник запущен...")
-    send_telegram(f"🚀 Бот {SYMBOL} запущен и следит за рынком!")
+    print("Мульти-бот запущен...")
+    send_telegram("🚀 Бот теперь следит за BTC, ETH, TON и SOL!")
+    
     while True:
-        check_market()
+        # Проверяем КАЖДУЮ монету из списка
+        for coin in SYMBOLS:
+            check_market(coin)
+            time.sleep(5) # Маленькая пауза между монетами
+            
+        print(f"Жду {CHECK_INTERVAL} секунд...")
         time.sleep(CHECK_INTERVAL)
